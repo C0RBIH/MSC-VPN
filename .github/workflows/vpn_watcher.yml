@@ -2,34 +2,34 @@ name: MSC_Premium_Watcher
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - name: Update Gist
+      - name: Process Keys
         run: |
-          # 1. Загрузка ключей
+          # 1. Загрузка
           RAW=$(curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt)
           
-          # 2. Умная замена названий серверов (ВК, Ютуб и т.д.)
-          # Сначала меняем стандартные имена на красивые, потом ставим общее имя подписки
+          # 2. Очистка и Красивые названия (VK, YT, Instagram и т.д.)
           COOKED=$(echo "$RAW" | grep "vless://" | \
             sed 's/#.*VK.*/#🔵 VK | MSC Premium/' | \
             sed 's/#.*YouTube.*/#🔴 YouTube | MSC Premium/' | \
             sed 's/#.*TikTok.*/#⚫ TikTok | MSC Premium/' | \
             sed 's/#.*INSTA.*/#🟣 Instagram | MSC Premium/' | \
-            sed 's/#.*WEB.*/#🌐 Web Browse | MSC Premium/' | \
+            sed 's/#.*WEB.*/#🌐 Web | MSC Premium/' | \
             sed 's/#.*GPT.*/#🤖 ChatGPT | MSC Premium/' | \
             sed 's/#.*GAME.*/#🎮 Gaming | MSC Premium/' | \
+            sed 's/#.*GP.*/#🤖 ChatGPT | MSC Premium/' | \
             sed '/#/! s/$/#⭐ MSC Premium VPN/' | \
             tr -d '\r')
           
-          # 3. Упаковка в JSON
-          echo "$COOKED" > keys_content.txt
-          JSON=$(jq -Rs '{"files": {"MSC-Premium-VPN": {"content": .}}}' keys_content.txt)
+          # 3. Создание JSON
+          echo "$COOKED" > keys.txt
+          JSON=$(jq -Rs '{"files": {"MSC-Premium-VPN": {"content": .}}}' keys.txt)
           
           # 4. Обновление Gist
           curl -L -s -X PATCH \
@@ -38,9 +38,9 @@ jobs:
             https://api.github.com/gists/${{ secrets.GIST_ID }} \
             -d "$JSON"
             
-          # 5. Сообщение в Telegram
-          FINAL_URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
-          MSG="✅ Подписка *MSC Premium VPN* обновлена!%0A%0AСерверы переименованы (ВК, YT, и др.)%0A%0A🔗 Ссылка для приложения:%0A$FINAL_URL"
+          # 5. Telegram
+          URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
+          MSG="✅ Подписка *MSC Premium VPN* обновлена!%0A%0AСерверы переименованы (ВК, YT, и др.)%0A%0A🔗 Ссылка:%0A$URL"
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
