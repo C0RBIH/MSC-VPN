@@ -2,46 +2,38 @@ name: MSC_Premium_Watcher
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Проверка каждые 5 минут
-  workflow_dispatch:      # Кнопка для ручного запуска
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
-  update_subscription:
+  update:
     runs-on: ubuntu-latest
     steps:
-      - name: Get Keys and Update Gist
+      - name: Update Gist and Notify
         run: |
-          # 1. Загружаем свежие ключи
-          RAW_DATA=$(curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt)
+          # 1. Загрузка ключей
+          RAW=$(curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt)
           
-          # 2. Оставляем только vless и меняем название (добавляем флаг)
-          # Используем "MSC-Premium-VPN" как ты и просил
-          COOKED_DATA=$(echo "$RAW_DATA" | grep "vless://" | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
-
-          # 3. Формируем JSON для Gist через jq (это самый надежный способ)
-          JSON_DATA=$(jq -n --arg content "$COOKED_DATA" '{"files": {"MSC-Premium-VPN": {"content": $content}}}')
+          # 2. Обработка ключей
+          COOKED=$(echo "$RAW" | grep "vless://" | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
           
-          # 4. Отправляем обновление в Gist
-          # Используем твои секреты: GIST_SECRET_TOKEN и GIST_ID
-          RESPONSE=$(curl -L -s -X PATCH \
+          # 3. Подготовка JSON через файл (чтобы не ломать синтаксис)
+          echo "$COOKED" > keys.txt
+          JSON=$(jq -Rs '{"files": {"MSC-Premium-VPN": {"content": .}}}' keys.txt)
+          
+          # 4. Отправка в Gist
+          curl -L -s -X PATCH \
             -H "Authorization: Bearer ${{ secrets.GIST_SECRET_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/gists/${{ secrets.GIST_ID }} \
-            -d "$JSON_DATA")
-
-          # Проверка на ошибки в ответе от GitHub
-          if echo "$RESPONSE" | grep -q "message"; then
-            echo "Ошибка обновления Gist: $RESPONSE"
-            exit 1
-          fi
-
-          # 5. Отправляем ссылку в Telegram
-          GIST_URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
+            -d "$JSON"
+          
+          # 5. Ссылка и Telegram
+          URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             --data-urlencode "text=✅ Подписка MSC Premium VPN обновлена!
 
-🔗 Ссылка для вставки в приложение:
-$GIST_URL"
+🔗 Ссылка для приложения:
+$URL"
