@@ -1,0 +1,35 @@
+name: MSC_Premium_Watcher
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Gist
+        run: |
+          # 1. Загрузка и очистка ключей
+          RAW=$(curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt)
+          COOKED=$(echo "$RAW" | grep "vless://" | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
+          
+          # 2. Упаковка в JSON через файл (самый надежный способ)
+          echo "$COOKED" > keys_content.txt
+          JSON=$(jq -Rs '{"files": {"MSC-Premium-VPN": {"content": .}}}' keys_content.txt)
+          
+          # 3. Отправка в Gist
+          curl -L -s -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GIST_SECRET_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/gists/${{ secrets.GIST_ID }} \
+            -d "$JSON"
+            
+          # 4. Отправка сообщения в Telegram
+          FINAL_URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
+          MSG="✅ Подписка MSC Premium VPN обновлена!%0A%0A🔗 Ссылка:%0A$FINAL_URL"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=$MSG"
