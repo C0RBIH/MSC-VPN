@@ -3,62 +3,45 @@ name: MSC_Premium_Watcher
 on:
   schedule:
     - cron: '*/5 * * * *' # Проверка каждые 5 минут
-  workflow_dispatch:
-
-permissions:
-  contents: write # Разрешение на запись, чтобы сохранять состояние
+  workflow_dispatch:      # Кнопка для ручного запуска
 
 jobs:
-  check_and_update:
+  update_subscription:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check for Changes
+      - name: Get Keys and Update Gist
         run: |
-          # 1. Загружаем свежие данные
-          curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt > current_status.txt
+          # 1. Загружаем свежие ключи
+          RAW_DATA=$(curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt)
           
-          # 2. Если файла с прошлой проверки нет, создаем его
-          touch last_status.txt
-          
-          # 3. Сравниваем
-          if ! cmp -s current_status.txt last_status.txt; then
-            echo "Изменения найдены! Обновляем подписку..."
-            
-            # Готовим ключи (фильтруем и меняем названия)
-            COOKED_DATA=$(grep "vless://" current_status.txt | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
-            
-            # Формируем JSON для Gist
-            JSON_DATA=$(jq -n --arg content "$COOKED_DATA" '{"files": {"MSC-Premium-VPN": {"content": $content}}}')
-            
-            # Обновляем Gist
-            curl -L -X PATCH \
-              -H "Authorization: Bearer ${{ secrets.GIST_SECRET_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              https://api.github.com/gists/${{ secrets.GIST_ID }} \
-              -d "$JSON_DATA"
-            
-            # Ссылка (прямая)
-            GIST_URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
-            
-            # Отправка в Telegram
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
-              --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-              --data-urlencode "text=🔔 Ключи обновились! 
+          # 2. Оставляем только vless и меняем название (добавляем флаг)
+          # Используем "MSC-Premium-VPN" как ты и просил
+          COOKED_DATA=$(echo "$RAW_DATA" | grep "vless://" | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
 
-Gist обновлен автоматически.
-🔗 Ссылка для приложения:
-$GIST_URL"
-            
-            # Сохраняем состояние для следующего раза
-            cp current_status.txt last_status.txt
-            git config --local user.email "action@github.com"
-            git config --local user.name "GitHub Action"
-            git add last_status.txt
-            git commit -m "Update vpn state" || echo "No changes"
-            git push
-          else
-            echo "Изменений нет. Спим дальше."
+          # 3. Формируем JSON для Gist через jq (это самый надежный способ)
+          JSON_DATA=$(jq -n --arg content "$COOKED_DATA" '{"files": {"MSC-Premium-VPN": {"content": $content}}}')
+          
+          # 4. Отправляем обновление в Gist
+          # Используем твои секреты: GIST_SECRET_TOKEN и GIST_ID
+          RESPONSE=$(curl -L -s -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GIST_SECRET_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/gists/${{ secrets.GIST_ID }} \
+            -d "$JSON_DATA")
+
+          # Проверка на ошибки в ответе от GitHub
+          if echo "$RESPONSE" | grep -q "message"; then
+            echo "Ошибка обновления Gist: $RESPONSE"
+            exit 1
           fi
+
+          # 5. Отправляем ссылку в Telegram
+          GIST_URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=✅ Подписка MSC Premium VPN обновлена!
+
+🔗 Ссылка для вставки в приложение:
+$GIST_URL"
