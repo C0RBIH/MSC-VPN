@@ -11,25 +11,38 @@ jobs:
     steps:
       - name: Update Gist
         run: |
-          # 1. Загрузка и очистка ключей
+          # 1. Загрузка ключей
           RAW=$(curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt)
-          COOKED=$(echo "$RAW" | grep "vless://" | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
           
-          # 2. Упаковка в JSON через файл (самый надежный способ)
+          # 2. Умная замена названий серверов (ВК, Ютуб и т.д.)
+          # Сначала меняем стандартные имена на красивые, потом ставим общее имя подписки
+          COOKED=$(echo "$RAW" | grep "vless://" | \
+            sed 's/#.*VK.*/#🔵 VK | MSC Premium/' | \
+            sed 's/#.*YouTube.*/#🔴 YouTube | MSC Premium/' | \
+            sed 's/#.*TikTok.*/#⚫ TikTok | MSC Premium/' | \
+            sed 's/#.*INSTA.*/#🟣 Instagram | MSC Premium/' | \
+            sed 's/#.*WEB.*/#🌐 Web Browse | MSC Premium/' | \
+            sed 's/#.*GPT.*/#🤖 ChatGPT | MSC Premium/' | \
+            sed 's/#.*GAME.*/#🎮 Gaming | MSC Premium/' | \
+            sed '/#/! s/$/#⭐ MSC Premium VPN/' | \
+            tr -d '\r')
+          
+          # 3. Упаковка в JSON
           echo "$COOKED" > keys_content.txt
           JSON=$(jq -Rs '{"files": {"MSC-Premium-VPN": {"content": .}}}' keys_content.txt)
           
-          # 3. Отправка в Gist
+          # 4. Обновление Gist
           curl -L -s -X PATCH \
             -H "Authorization: Bearer ${{ secrets.GIST_SECRET_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/gists/${{ secrets.GIST_ID }} \
             -d "$JSON"
             
-          # 4. Отправка сообщения в Telegram
+          # 5. Сообщение в Telegram
           FINAL_URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
-          MSG="✅ Подписка MSC Premium VPN обновлена!%0A%0A🔗 Ссылка:%0A$FINAL_URL"
+          MSG="✅ Подписка *MSC Premium VPN* обновлена!%0A%0AСерверы переименованы (ВК, YT, и др.)%0A%0A🔗 Ссылка для приложения:%0A$FINAL_URL"
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "parse_mode=Markdown" \
             -d "text=$MSG"
