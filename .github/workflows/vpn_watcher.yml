@@ -1,0 +1,64 @@
+name: MSC_Premium_Watcher
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Проверка каждые 5 минут
+  workflow_dispatch:
+
+permissions:
+  contents: write # Разрешение на запись, чтобы сохранять состояние
+
+jobs:
+  check_and_update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for Changes
+        run: |
+          # 1. Загружаем свежие данные
+          curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt > current_status.txt
+          
+          # 2. Если файла с прошлой проверки нет, создаем его
+          touch last_status.txt
+          
+          # 3. Сравниваем
+          if ! cmp -s current_status.txt last_status.txt; then
+            echo "Изменения найдены! Обновляем подписку..."
+            
+            # Готовим ключи (фильтруем и меняем названия)
+            COOKED_DATA=$(grep "vless://" current_status.txt | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
+            
+            # Формируем JSON для Gist
+            JSON_DATA=$(jq -n --arg content "$COOKED_DATA" '{"files": {"MSC-Premium-VPN": {"content": $content}}}')
+            
+            # Обновляем Gist
+            curl -L -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GIST_SECRET_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/gists/${{ secrets.GIST_ID }} \
+              -d "$JSON_DATA"
+            
+            # Ссылка (прямая)
+            GIST_URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
+            
+            # Отправка в Telegram
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+              --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+              --data-urlencode "text=🔔 Ключи обновились! 
+
+Gist обновлен автоматически.
+🔗 Ссылка для приложения:
+$GIST_URL"
+            
+            # Сохраняем состояние для следующего раза
+            cp current_status.txt last_status.txt
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            git add last_status.txt
+            git commit -m "Update vpn state" || echo "No changes"
+            git push
+          else
+            echo "Изменений нет. Спим дальше."
+          fi
