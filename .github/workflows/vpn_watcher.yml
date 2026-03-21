@@ -9,26 +9,24 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - name: Update Gist and Notify
+      - name: Run Update
         run: |
-          # 1. Загрузка ключей
+          # 1. Загрузка и очистка
           RAW=$(curl -s https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS.txt)
-          
-          # 2. Обработка ключей
           COOKED=$(echo "$RAW" | grep "vless://" | sed 's/#.*/#🇷🇺 MSC Premium VPN/' | tr -d '\r')
           
-          # 3. Подготовка JSON через файл (чтобы не ломать синтаксис)
+          # 2. Создание JSON через файл
           echo "$COOKED" > keys.txt
           JSON=$(jq -Rs '{"files": {"MSC-Premium-VPN": {"content": .}}}' keys.txt)
           
-          # 4. Отправка в Gist
+          # 3. Обновление Gist
           curl -L -s -X PATCH \
             -H "Authorization: Bearer ${{ secrets.GIST_SECRET_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/gists/${{ secrets.GIST_ID }} \
             -d "$JSON"
           
-          # 5. Ссылка и Telegram
+          # 4. Отправка в Telegram
           URL="https://gist.githubusercontent.com/C0RBIH/${{ secrets.GIST_ID }}/raw/MSC-Premium-VPN"
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
